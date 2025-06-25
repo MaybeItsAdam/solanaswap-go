@@ -74,6 +74,37 @@ type SwapData struct {
 	Data interface{}
 }
 
+var KNOWN_DEX_PROGRAM_IDS = map[solana.PublicKey]bool{
+	RAYDIUM_V4_PROGRAM_ID:                     true,
+	RAYDIUM_CPMM_PROGRAM_ID:                   true,
+	RAYDIUM_AMM_PROGRAM_ID:                    true,
+	RAYDIUM_CONCENTRATED_LIQUIDITY_PROGRAM_ID: true,
+	ORCA_PROGRAM_ID:                           true,
+	METEORA_PROGRAM_ID:                        true,
+	METEORA_POOLS_PROGRAM_ID:                  true,
+	METEORA_DLMM_PROGRAM_ID:                   true,
+	PUMPFUN_AMM_PROGRAM_ID:                    true,
+	PUMP_FUN_PROGRAM_ID:                       true,
+}
+
+func (p *Parser) isARouter() bool {
+	if p.txInfo == nil || p.txMeta == nil {
+		return false
+	}
+
+	if len(p.txMeta.InnerInstructions) > 0 {
+		for _, inner := range p.txMeta.InnerInstructions {
+			for _, ix := range inner.Instructions {
+				progID := p.allAccountKeys[ix.ProgramIDIndex]
+				if KNOWN_DEX_PROGRAM_IDS[progID] {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (p *Parser) ParseTransaction() ([]SwapData, error) {
 	var parsedSwaps []SwapData
 
@@ -87,14 +118,7 @@ func (p *Parser) ParseTransaction() ([]SwapData, error) {
 		case progID.Equals(MOONSHOT_PROGRAM_ID):
 			skip = true
 			parsedSwaps = append(parsedSwaps, p.processMoonshotSwaps()...)
-		case progID.Equals(BANANA_GUN_PROGRAM_ID) ||
-			progID.Equals(MINTECH_PROGRAM_ID) ||
-			progID.Equals(BLOOM_PROGRAM_ID) ||
-			progID.Equals(NOVA_PROGRAM_ID) ||
-			progID.Equals(MAESTRO_PROGRAM_ID) ||
-			progID.Equals(TROJAN_PROGRAM_ID) ||
-			progID.Equals(BONKBOT_PROGRAM_ID) ||
-			progID.Equals(SHURIKEN_PROGRAM_ID):
+		case p.isARouter():
 			if innerSwaps := p.processRouterSwaps(i); len(innerSwaps) > 0 {
 				parsedSwaps = append(parsedSwaps, innerSwaps...)
 			}
